@@ -20,11 +20,22 @@ impl<T> RawMyVec<T> {
         }
     }
 
+    pub fn with_capacity(cap: usize) -> Self {
+        let layout = Layout::array::<T>(cap).unwrap();
+        let raw_ptr = unsafe { alloc::alloc(layout) };
+        let ptr = match NonNull::new(raw_ptr as *mut T) {
+            Some(n) => n,
+            None => alloc::handle_alloc_error(layout),
+        };
+        Self { ptr, cap }
+    }
+
     fn grow(&mut self) {
         let (new_capacity, new_layout) = if self.cap == 0 {
             (1, Layout::array::<T>(1).unwrap())
         } else {
             // this cannot overflow since 2*self.cap < isize.MAX
+            // doubling the size every time
             let new_cap = self.cap * 2;
 
             // layout array checks to see if the size < usize.MAX
@@ -89,11 +100,16 @@ impl<T> MyVec<T> {
         }
     }
 
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            buf: RawMyVec::with_capacity(cap),
+            len: 0,
+        }
+    }
+
     pub fn push(&mut self, element: T) {
         if self.len == self.buf.cap {
-            unsafe {
-                self.buf.grow();
-            }
+            self.buf.grow();
         }
 
         // write the new thing to self.ptr + self.len which is our offset into this objects space
@@ -120,9 +136,7 @@ impl<T> MyVec<T> {
     pub fn insert(&mut self, index: usize, element: T) {
         assert!(index < self.len, "Out of bounds");
         if self.len == self.buf.cap {
-            unsafe {
-                self.buf.grow();
-            }
+            self.buf.grow();
         }
 
         unsafe {
